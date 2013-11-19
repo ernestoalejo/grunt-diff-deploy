@@ -41,6 +41,8 @@
     "gruntplugin"
   ],
   "dependencies": {
-    "jsftp": "~1.1.1"
+    "jsftp": "~1.1.1",
+    "prompt": "~0.2.11",
+    "async": "~0.2.9"
   }
 }

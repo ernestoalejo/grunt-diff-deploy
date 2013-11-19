@@ -10,35 +10,86 @@
 
 module.exports = function(grunt) {
 
-  grunt.registerMultiTask('diff_deploy', 'Deploy a folder using FTP. It uploads differences only. It can handle server generated files mixed with the uploaded ones.', function() {
-    this.files.forEach(function(file) {
-      console.log(file.src);
-    });
-    /*// Merge task-specific and/or target-specific options with these defaults.
-    var options = this.options({
-      punctuation: '.',
-      separator: ', '
-    });
+  var prompt = require('prompt'),
+      JSFtp = require("jsftp"),
+      async = require('async'),
+      fs = require('fs');
 
-    // Iterate over all specified file groups.
-    this.files.forEach(function(f) {
-      // Concat specified files.
-      var src = f.src.filter(function(filepath) {
-        // Warn on and remove invalid source files (if nonull was set).
-        if (!grunt.file.exists(filepath)) {
-          grunt.log.warn('Source file "' + filepath + '" not found.');
-          return false;
-        } else {
-          return true;
+  var ftp;
+
+  function credentials(host, done) {
+    // Ask for username & password without prompts
+    prompt.start();
+    prompt.message = '';
+    prompt.delimiter = '';
+
+    var schema = {
+      properties: {
+        /*username: {
+          description: 'FTP username:'.cyan,
+        },*/
+        password: {
+          description: 'FTP password:'.cyan,
+          hidden: true,
         }
-      }).map(function(filepath) {
-        // Read file source.
-        return grunt.file.read(filepath);
-      }).join(grunt.util.normalizelf(options.separator));
+      },
+    };
+    prompt.get(schema, function(err, result) {
+      if (err) {
+        throw err;
+      }
 
-      // Handle options.
-      src += options.punctuation;
+      // Login
+      ftp = new JSFtp({
+        host: host,
+        user: result.username || 'ernesto',
+        pass: result.password,
+      });
 
+      // Check login credentials
+      ftp.raw.pwd(function(err, res) {
+        if (err) {
+          if (err.code === 530) {
+            grunt.fatal('bad username or password');
+          }
+          throw err;
+        }
+        done();
+      });
+    });
+  }
+
+  grunt.registerMultiTask('diff_deploy', 'Deploy a folder using FTP. It uploads differences only. It can handle server generated files mixed with the uploaded ones.', function() {
+    var doneTask = this.async();
+    var options = this.options();
+
+    // Extract filepaths
+    var filepaths = this.files.map(function(file) {
+      return file.src[0];
+    }).filter(function(filepath) {
+      // Check if the file / folder exists
+      if (!grunt.file.exists(filepath)) {
+        grunt.log.warn('Source file "' + src + '" not found.');
+        return false;
+      }
+      return true;
+    });
+
+    async.series([
+      function(done) {
+        async.map(filepaths, fs.stat, done);
+      },
+      function(done) {
+        credentials(options.host, done);
+      },
+      function() {
+        doneTask();
+      }
+    ], function(err) {
+      if (err) throw err;
+    });
+
+    /*
       // Write the destination file.
       grunt.file.write(f.dest, src);
 

@@ -48,6 +48,9 @@ module.exports = function(grunt) {
     // Configuration to be run (and then tested).
     diff_deploy: {
       default_options: {
+        options: {
+          host: 'localhost',
+        },
         files: [
           {
             src: ['**', '**/.*'],
