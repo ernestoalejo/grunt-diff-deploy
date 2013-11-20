@@ -20,7 +20,7 @@ module.exports = function(grunt) {
 
   var ftpin, ftpout;
 
-  function credentials(host, done) {
+  function credentials(host, remoteBase, done) {
     // Ask for username & password without prompts
     prompt.start();
     prompt.message = '';
@@ -55,16 +55,21 @@ module.exports = function(grunt) {
       });
 
       // Check login credentials
-      ftpout.raw.pwd(function(err, res) {
-        if (err) {
-          if (err.code === 530) {
-            grunt.fatal('bad username or password');
-          }
-          throw err;
-        }
+      async.series([
+        // Check user name & password
+        function(callback) {
+          ftpout.raw.pwd(function(err, res) {
+            if (err && err.code === 530) {
+              grunt.fatal('bad username or password');
+            }
+            callback(err);
+          });
+        },
 
-        ftpout.raw.cwd('tt', function() { done(); });
-      });
+        // Move to the subfolder in both connections
+        ftpout.raw.cwd.bind(ftpout, remoteBase),
+        ftpin.raw.cwd.bind(ftpin, remoteBase),
+      ], done);
     });
   }
 
@@ -99,13 +104,13 @@ module.exports = function(grunt) {
   }
 
   function fetchRemoteHashes(done) {
-    grunt.verbose.writeln('fetch remote hashes...');
+    grunt.log.write('===== loading hashes... ');
     ftpin.get('push-hashes', function(err, socket) {
       if (err) {
         // If the file cannot be found, keep running as if nothing
         // has been uploaded yet to the server
         if (err.code === 550) {
-          grunt.verbose.writeln('remote hashes not found, using an empty default');
+          grunt.log.writeln('[NOT FOUND]'.yellow);
           done(null, {});
         } else {
           done(err, {});
@@ -118,72 +123,145 @@ module.exports = function(grunt) {
         str += data.toString();
       });
       socket.on('close', function(err) {
-        grunt.verbose.writeln('done fetching remote hashes');
+          grunt.log.writeln('[SUCCESS]'.green);
         done(err, JSON.parse(str));
       });
+      socket.resume();
     });
   }
 
   function uploadDiff(basepath, localHashes, remoteHashes, filestats, done) {
     // Extract all the local paths, sort it to have the folders first
-    // and then the tree inside it
-    var filepaths = [];
+    // and then the tree inside it.
+    // Zip paths & stats together too.
+    var localFilepaths = [];
     for (var filepath in localHashes) {
-      filepaths.push(filepath);
+      localFilepaths.push(filepath);
     }
-    filepaths.sort();
-
-    var infos = filepaths.map(function(filepath, i) {
+    localFilepaths.sort();
+    var localInfos = localFilepaths.map(function(filepath, i) {
       return {
         filepath: filepath,
         filestat: filestats[i],
       };
     });
 
-    async.mapSeries(infos, function(info, callback) {
-      var rel = path.relative(basepath, info.filepath);
-      if (!rel) {
-        callback();
-        return;
-      }
+    // Prepare the remote files so we can remove unused files,
+    // in reversed order so we delete first the files and then the folders
+    // containing them.
+    // Zip paths & stats together too.
+    var remoteFilepaths = [];
+    for (var filepath in remoteHashes) {
+      remoteFilepaths.push(filepath);
+    }
+    remoteFilepaths.sort();
+    var remoteInfos = remoteFilepaths.map(function(filepath, i) {
+      return {
+        filepath: filepath,
+        filestat: filestats[i],
+      };
+    });
+    remoteFilepaths.sort(function(a, b) {
+      return (a.filepath == b.filepath) ? 0 : (a.filepath < b.filepath) ? 1 : -1;
+    });
 
-      // Ignore similar fiels that have not been modified
-      if (remoteHashes[info.filepath] && remoteHashes[info.filepath] == localHashes[info.filepath]) {
-        return;
-      }
+    async.series([
+      async.mapSeries.bind(async, localInfos, function(info, mapCallback) {
+        // Relativize path, and ignore root folder
+        var rel = path.relative(basepath, info.filepath);
+        if (!rel) {
+          mapCallback();
+          return;
+        }
 
-      var changePerms = function() {
-        grunt.verbose.writeln('changing file perms...');
-        ftpout.raw.site('chmod', info.filestat.mode.toString(8), rel, function(err) {
+        // Ignore similar fiels that have not been modified
+        if (remoteHashes[info.filepath] && remoteHashes[info.filepath] == localHashes[info.filepath]) {
+          grunt.verbose.writeln('ignored equal file: ' + info.filepath);
+          mapCallback();
+          return;
+        }
+
+        async.series([
+          // Create directories
+          function(callback) {
+            if (!info.filestat.isDirectory()) {
+              callback();
+              return;
+            }
+
+            grunt.log.write('---------- creating directory /' + rel + '... ');
+            ftpout.raw.mkd(rel, function(err, result) {
+              if (err) {
+                if (err.code != 550) {
+                  done(err);
+                } else {
+                  grunt.log.writeln('[PRESENT]'.yellow);
+                }
+              } else {
+                grunt.log.writeln('[SUCCESS]'.green);
+              }
+              callback();
+            });
+          },
+
+          // Upload files
+          function(callback) {
+            if (info.filestat.isDirectory()) {
+              callback();
+              return;
+            }
+
+            grunt.log.write('---------- uploading file /' + rel + '... ');
+            ftpout.put(info.filepath, rel, function(err) {
+              if (err) done(err);
+              grunt.log.writeln('[SUCCESS]'.green);
+              callback();
+            });
+          },
+
+          // Change permissions
+          function(callback) {
+            grunt.verbose.writeln('changing file perms...');
+            ftpout.raw.site('chmod', info.filestat.mode.toString(8), rel, function(err) {
+              if (err) done(err);
+              grunt.verbose.writeln('done changing perms');
+              callback();
+            });
+          },
+        ], mapCallback);
+      }),
+
+      async.mapSeries.bind(async, remoteInfos, function(info, mapCallback) {
+        if (localHashes[info.filepath]) {
+          mapCallback();
+          return;
+        }
+
+        // Relativize path
+        var rel = path.relative(basepath, info.filepath);
+
+        grunt.log.write('---------- removing /' + rel + '... ');
+        async.series([
+          // Try first to remove the file
+          function(callback) {
+            ftpout.raw.dele(rel, function(err) {
+              if (err) done(err);
+              grunt.log.writeln('[SUCCESS]'.green);
+              callback();
+            });
+          },
+        ], mapCallback);
+      }),
+
+      function(callback) {
+        grunt.log.write('===== saving hashes... ');
+        ftpout.put(new Buffer(JSON.stringify(localHashes)), 'push-hashes', function(err) {
           if (err) done(err);
-          grunt.verbose.writeln('done changing perms');
+          grunt.log.writeln('[SUCCESS]'.green);
           callback();
         });
-      };
-
-      if (info.filestat.isDirectory()) {
-        grunt.log.write('.......... creating directory /' + rel + '... ');
-        ftpout.raw.mkd(rel, function(err, result) {
-          if (err) {
-            if (err.code != 550) {
-              done(err);
-            } else {
-              grunt.log.writeln('PRESENT'.yellow);
-            }
-          } else {
-            grunt.log.writeln('SUCCESS'.green);
-          }
-          changePerms();
-        });
-      } else {
-        grunt.log.write('.......... uploading file /' + rel + '... ');
-        ftpout.put(info.filepath, rel, function(err) {
-          if (err) done(err);
-          grunt.log.writeln('SUCCESS'.green);
-          changePerms();
-        });
-      }
-    }, done);
+      },
+    ], done);
   }
 
   grunt.registerMultiTask('diff_deploy', 'Deploy a folder using FTP.', function() {
@@ -191,6 +269,7 @@ module.exports = function(grunt) {
     var options = this.options({
       host: 'localhost',
       base: '.',
+      remoteBase: '.',
     });
 
     // Extract filepaths
@@ -206,11 +285,13 @@ module.exports = function(grunt) {
     async.waterfall([
       // Login to the FTP server
       function(done) {
-        credentials(options.host, done);
+        credentials(options.host, options.remoteBase, function(err) {
+          done(err);
+        });
       },
 
       // Stat all local files & hash them
-      async.map.bind(this, filepaths, fs.stat),
+      async.map.bind(async, filepaths, fs.stat),
       hashLocalFiles.bind(this, filepaths),
 
       // Fetch the remote hashes
