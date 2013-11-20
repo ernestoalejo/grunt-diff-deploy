@@ -17,14 +17,14 @@ Once the plugin has been installed, it may be enabled inside your Gruntfile with
 grunt.loadNpmTasks('grunt-diff-deploy');
 ```
 
-## The "diff_deploy" task
+## The "push" task
 
 ### Overview
-In your project's Gruntfile, add a section named `diff_deploy` to the data object passed into `grunt.initConfig()`.
+In your project's Gruntfile, add a section named `push` to the data object passed into `grunt.initConfig()`.
 
 ```js
 grunt.initConfig({
-  diff_deploy: {
+  push: {
     options: {
       // Task-specific options go here.
     },
@@ -69,7 +69,7 @@ called `deploy`, building the routes taking `deploy` as the base path.
 
 ```js
 grunt.initConfig({
-  diff_deploy: {
+  push: {
     options: {
       host: 'example.com',
       base: 'deploy',
@@ -89,7 +89,7 @@ Same as before, but uploading all files to a subfolder of the host.
 
 ```js
 grunt.initConfig({
-  diff_deploy: {
+  push: {
     options: {
       host: 'example.com',
       base: 'deploy',
