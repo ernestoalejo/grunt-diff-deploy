@@ -45,9 +45,9 @@ module.exports = function(grunt) {
 
     var schema = {
       properties: {
-        /*username: {
+        username: {
           description: 'FTP username:'.cyan,
-        },*/
+        },
         password: {
           description: 'FTP password:'.cyan,
           hidden: true,
@@ -62,12 +62,12 @@ module.exports = function(grunt) {
       // Login
       ftpin = new JSFtp({
         host: host,
-        user: result.username || 'ernesto',
+        user: result.username,
         pass: result.password,
       });
       ftpout = new JSFtp({
         host: host,
-        user: result.username || 'ernesto',
+        user: result.username,
         pass: result.password,
       });
 
@@ -330,14 +330,6 @@ module.exports = function(grunt) {
     ], function(err) {
       if (err) throw err;
     });
-
-    /*
-      // Write the destination file.
-      grunt.file.write(f.dest, src);
-
-      // Print a success message.
-      grunt.log.writeln('File "' + f.dest + '" created.');
-    });*/
   });
 
 };

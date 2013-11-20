@@ -13,7 +13,7 @@ npm install grunt-diff-deploy --save-dev
 
 Once the plugin has been installed, it may be enabled inside your Gruntfile with this line of JavaScript:
 
-```js
+```js 
 grunt.loadNpmTasks('grunt-diff-deploy');
 ```
 
@@ -37,47 +37,71 @@ grunt.initConfig({
 
 ### Options
 
-#### options.separator
+#### options.host
 Type: `String`
-Default value: `',  '`
+Default value: `localhost`
 
-A string value that is used to do something with whatever.
+Host to connect to.
 
-#### options.punctuation
+#### options.base
 Type: `String`
-Default value: `'.'`
+Default value: `.`
 
-A string value that is used to do something else with whatever else.
+Paths of the remoted files will be generated from the relative path to this base
+folder in the local computer.
+
+For example, if the full path it's `/home/user/myfolder/mysubfolder/myfile` and
+`options.base` is pointing to `/home/user/myfolder`; the file will be uploaded
+to `{{options.remoteBase}}/mysubfolder/myfile` in the server.
+
+#### options.remoteBase
+Type: `String`
+Default value: `.`
+
+If you want to upload files to a subdirectory of the remote computer, specify the
+path here.
 
 ### Usage Examples
 
-#### Default Options
-In this example, the default options are used to do something with whatever. So if the `testing` file has the content `Testing` and the `123` file had the content `1 2 3`, the generated result would be `Testing, 1 2 3.`
-
-```js
-grunt.initConfig({
-  diff_deploy: {
-    options: {},
-    files: {
-      'dest/default_options': ['src/testing', 'src/123'],
-    },
-  },
-})
-```
-
-#### Custom Options
-In this example, custom options are used to do something else with whatever else. So if the `testing` file has the content `Testing` and the `123` file had the content `1 2 3`, the generated result in this case would be `Testing: 1 2 3 !!!`
+#### Common usage
+The most common usage of this task: uploading to a host the contents of a folder
+called `deploy`, building the routes taking `deploy` as the base path.
 
 ```js
 grunt.initConfig({
   diff_deploy: {
     options: {
-      separator: ': ',
-      punctuation: ' !!!',
+      host: 'example.com',
+      base: 'deploy',
     },
-    files: {
-      'dest/default_options': ['src/testing', 'src/123'],
+    files: [
+      {
+        src: ['**', '**/.*'],
+        cwd: 'deploy',
+        expand: true,
+      },
+    ],
+  },
+})
+```
+#### Upload to a subfolder
+Same as before, but uploading all files to a subfolder of the host.
+
+```js
+grunt.initConfig({
+  diff_deploy: {
+    options: {
+      host: 'example.com',
+      base: 'deploy',
+      remoteBase: 'mysubfolder1/mysubfolder2',
     },
+    files: [
+      {
+        src: ['**', '**/.*'],
+        cwd: 'deploy',
+        expand: true,
+      },
+    ],
   },
 })
 ```
