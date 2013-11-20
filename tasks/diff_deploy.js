@@ -10,10 +10,12 @@
 
 module.exports = function(grunt) {
 
+  var inspect = require('util').inspect;
   var prompt = require('prompt'),
       JSFtp = require("jsftp"),
       async = require('async'),
-      fs = require('fs');
+      fs = require('fs'),
+      crypto = require('crypto');
 
   var ftp;
 
@@ -59,6 +61,36 @@ module.exports = function(grunt) {
     });
   }
 
+  function hashLocalFiles(filepaths, filestats, done) {
+    var hashes = {};
+
+    var infos = filepaths.map(function(filepath, i) {
+      return {
+        filepath: filepath,
+        filestat: filestats[i],
+      };
+    });
+    async.map(infos, function(info, callback) {
+      var shasum = crypto.createHash('sha1');
+
+      shasum.update(info.filestat.mode.toString(8), 'ascii');
+
+      var endsum = function() {
+        hashes[info.filepath] = shasum.digest('hex');
+        callback();
+      };
+      if (info.filestat.isFile()) {
+        var s = fs.ReadStream(info.filepath);
+        s.on('data', shasum.update.bind(shasum));
+        s.on('end', endsum);
+        return;
+      }
+      endsum();
+    }, function(err) {
+      done(err, hashes);
+    });
+  }
+
   grunt.registerMultiTask('diff_deploy', 'Deploy a folder using FTP. It uploads differences only. It can handle server generated files mixed with the uploaded ones.', function() {
     var doneTask = this.async();
     var options = this.options();
@@ -75,13 +107,22 @@ module.exports = function(grunt) {
       return true;
     });
 
-    async.series([
-      function(done) {
-        async.map(filepaths, fs.stat, done);
-      },
+    async.waterfall([
+      // Login to the FTP server
       function(done) {
         credentials(options.host, done);
       },
+
+      // Stat all local files & hash them
+      async.map.bind(this, filepaths, fs.stat),
+      hashLocalFiles.bind(this, filepaths),
+
+      function(localHashes, done) {
+        console.log(inspect(localHashes));
+        done();
+      },
+
+      // Finish the task
       function() {
         doneTask();
       }
