@@ -20,6 +20,23 @@ module.exports = function(grunt) {
 
   var ftpin, ftpout;
 
+  var curcol = 0;
+  var totalcols = process.stdout.columns;
+  var wrap = function(text) {
+    curcol += text.length;
+    curcol %= totalcols;
+    return text;
+  };
+  var wrapRight = function(text) {
+    if (curcol + text.length > totalcols) {
+      text += '\n';
+      curcol = 0;
+    }
+    text = grunt.util.repeat(totalcols - text.length - curcol - 3) + text;
+    curcol = 0;
+    return text;
+  };
+
   function credentials(host, remoteBase, done) {
     // Ask for username & password without prompts
     prompt.start();
@@ -67,8 +84,8 @@ module.exports = function(grunt) {
         },
 
         // Move to the subfolder in both connections
-        ftpout.raw.cwd.bind(ftpout, remoteBase),
-        ftpin.raw.cwd.bind(ftpin, remoteBase),
+        async.apply(ftpout.raw.cwd, remoteBase),
+        async.apply(ftpin.raw.cwd, remoteBase),
       ], done);
     });
   }
@@ -104,13 +121,13 @@ module.exports = function(grunt) {
   }
 
   function fetchRemoteHashes(done) {
-    grunt.log.write('===== loading hashes... ');
+    grunt.log.write(wrap('===== loading hashes... '));
     ftpin.get('push-hashes', function(err, socket) {
       if (err) {
         // If the file cannot be found, keep running as if nothing
         // has been uploaded yet to the server
         if (err.code === 550) {
-          grunt.log.writeln('[NOT FOUND]'.yellow);
+          grunt.log.writeln(wrapRight('[NOT FOUND]').yellow);
           done(null, {});
         } else {
           done(err, {});
@@ -123,7 +140,7 @@ module.exports = function(grunt) {
         str += data.toString();
       });
       socket.on('close', function(err) {
-          grunt.log.writeln('[SUCCESS]'.green);
+          grunt.log.writeln(wrapRight('[SUCCESS]').green);
         done(err, JSON.parse(str));
       });
       socket.resume();
@@ -161,12 +178,10 @@ module.exports = function(grunt) {
         filestat: filestats[i],
       };
     });
-    remoteFilepaths.sort(function(a, b) {
-      return (a.filepath == b.filepath) ? 0 : (a.filepath < b.filepath) ? 1 : -1;
-    });
+    remoteInfos.reverse();
 
     async.series([
-      async.mapSeries.bind(async, localInfos, function(info, mapCallback) {
+      async.apply(async.mapSeries, localInfos, function(info, mapCallback) {
         // Relativize path, and ignore root folder
         var rel = path.relative(basepath, info.filepath);
         if (!rel) {
@@ -189,16 +204,16 @@ module.exports = function(grunt) {
               return;
             }
 
-            grunt.log.write('---------- creating directory /' + rel + '... ');
+            grunt.log.write(wrap('d--------- /' + rel));
             ftpout.raw.mkd(rel, function(err, result) {
               if (err) {
                 if (err.code != 550) {
                   done(err);
                 } else {
-                  grunt.log.writeln('[PRESENT]'.yellow);
+                  grunt.log.writeln(wrapRight('[PRESENT]').yellow);
                 }
               } else {
-                grunt.log.writeln('[SUCCESS]'.green);
+                grunt.log.writeln(wrapRight('[SUCCESS]').green);
               }
               callback();
             });
@@ -211,10 +226,10 @@ module.exports = function(grunt) {
               return;
             }
 
-            grunt.log.write('---------- uploading file /' + rel + '... ');
+            grunt.log.write(wrap('f--------- /' + rel));
             ftpout.put(info.filepath, rel, function(err) {
               if (err) done(err);
-              grunt.log.writeln('[SUCCESS]'.green);
+              grunt.log.writeln(wrapRight('[SUCCESS]').green);
               callback();
             });
           },
@@ -231,7 +246,7 @@ module.exports = function(grunt) {
         ], mapCallback);
       }),
 
-      async.mapSeries.bind(async, remoteInfos, function(info, mapCallback) {
+      async.apply(async.mapSeries, remoteInfos, function(info, mapCallback) {
         if (localHashes[info.filepath]) {
           mapCallback();
           return;
@@ -240,24 +255,28 @@ module.exports = function(grunt) {
         // Relativize path
         var rel = path.relative(basepath, info.filepath);
 
-        grunt.log.write('---------- removing /' + rel + '... ');
+        grunt.log.write(wrap('---------- /' + rel).magenta);
         async.series([
-          // Try first to remove the file
           function(callback) {
             ftpout.raw.dele(rel, function(err) {
-              if (err) done(err);
-              grunt.log.writeln('[SUCCESS]'.green);
-              callback();
+              if (!err) grunt.log.writeln(wrapRight('[SUCCESS]').green);
+              callback((err && err.code !== 550) ? err : null);
+            });
+          },
+          function(callback) {
+            ftpout.raw.rmd(rel, function(err) {
+              if (!err) grunt.log.writeln(wrapRight('[SUCCESS]').green);
+              callback((err && err.code !== 550) ? err : null);
             });
           },
         ], mapCallback);
       }),
 
       function(callback) {
-        grunt.log.write('===== saving hashes... ');
+        grunt.log.write(wrap('===== saving hashes... '));
         ftpout.put(new Buffer(JSON.stringify(localHashes)), 'push-hashes', function(err) {
           if (err) done(err);
-          grunt.log.writeln('[SUCCESS]'.green);
+          grunt.log.writeln(wrapRight('[SUCCESS]').green);
           callback();
         });
       },
@@ -291,8 +310,8 @@ module.exports = function(grunt) {
       },
 
       // Stat all local files & hash them
-      async.map.bind(async, filepaths, fs.stat),
-      hashLocalFiles.bind(this, filepaths),
+      async.apply(async.map, filepaths, fs.stat),
+      async.apply(hashLocalFiles, filepaths),
 
       // Fetch the remote hashes
       function(localHashes, filestats, done) {
@@ -302,7 +321,7 @@ module.exports = function(grunt) {
       },
 
       // Upload differences to the server
-      uploadDiff.bind(this, options.base),
+      async.apply(uploadDiff, options.base),
 
       // Finish the task
       function() {
