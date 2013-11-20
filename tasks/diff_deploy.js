@@ -10,9 +10,8 @@
 
 module.exports = function(grunt) {
 
-  var inspect = require('util').inspect;
   var prompt = require('prompt'),
-      JSFtp = require("jsftp"),
+      JSFtp = require('jsftp'),
       async = require('async'),
       fs = require('fs'),
       crypto = require('crypto'),
@@ -75,7 +74,7 @@ module.exports = function(grunt) {
       async.series([
         // Check user name & password
         function(callback) {
-          ftpout.raw.pwd(function(err, res) {
+          ftpout.raw.pwd(function(err) {
             if (err && err.code === 530) {
               grunt.fatal('bad username or password');
             }
@@ -140,7 +139,7 @@ module.exports = function(grunt) {
         str += data.toString();
       });
       socket.on('close', function(err) {
-          grunt.log.writeln(wrapRight('[SUCCESS]').green);
+        grunt.log.writeln(wrapRight('[SUCCESS]').green);
         done(err, JSON.parse(str));
       });
       socket.resume();
@@ -168,7 +167,7 @@ module.exports = function(grunt) {
     // containing them.
     // Zip paths & stats together too.
     var remoteFilepaths = [];
-    for (var filepath in remoteHashes) {
+    for (filepath in remoteHashes) {
       remoteFilepaths.push(filepath);
     }
     remoteFilepaths.sort();
@@ -205,7 +204,7 @@ module.exports = function(grunt) {
             }
 
             grunt.log.write(wrap('d--------- /' + rel));
-            ftpout.raw.mkd(rel, function(err, result) {
+            ftpout.raw.mkd(rel, function(err) {
               if (err) {
                 if (err.code != 550) {
                   done(err);
@@ -228,7 +227,7 @@ module.exports = function(grunt) {
 
             grunt.log.write(wrap('f--------- /' + rel));
             ftpout.put(info.filepath, rel, function(err) {
-              if (err) done(err);
+              if (err) { done(err); }
               grunt.log.writeln(wrapRight('[SUCCESS]').green);
               callback();
             });
@@ -238,7 +237,7 @@ module.exports = function(grunt) {
           function(callback) {
             grunt.verbose.writeln('changing file perms...');
             ftpout.raw.site('chmod', info.filestat.mode.toString(8), rel, function(err) {
-              if (err) done(err);
+              if (err) { done(err); }
               grunt.verbose.writeln('done changing perms');
               callback();
             });
@@ -259,13 +258,17 @@ module.exports = function(grunt) {
         async.series([
           function(callback) {
             ftpout.raw.dele(rel, function(err) {
-              if (!err) grunt.log.writeln(wrapRight('[SUCCESS]').green);
+              if (!err) {
+                grunt.log.writeln(wrapRight('[SUCCESS]').green);
+              }
               callback((err && err.code !== 550) ? err : null);
             });
           },
           function(callback) {
             ftpout.raw.rmd(rel, function(err) {
-              if (!err) grunt.log.writeln(wrapRight('[SUCCESS]').green);
+              if (!err) {
+                grunt.log.writeln(wrapRight('[SUCCESS]').green);
+              }
               callback((err && err.code !== 550) ? err : null);
             });
           },
@@ -275,7 +278,7 @@ module.exports = function(grunt) {
       function(callback) {
         grunt.log.write(wrap('===== saving hashes... '));
         ftpout.put(new Buffer(JSON.stringify(localHashes)), 'push-hashes', function(err) {
-          if (err) done(err);
+          if (err) { done(err); }
           grunt.log.writeln(wrapRight('[SUCCESS]').green);
           callback();
         });
@@ -295,7 +298,7 @@ module.exports = function(grunt) {
     var filepaths = this.filesSrc.filter(function(filepath) {
       // Check if the file / folder exists
       if (!grunt.file.exists(filepath)) {
-        grunt.log.warn('Source file "' + src + '" not found.');
+        grunt.log.warn('Source file "' + filepath + '" not found.');
         return false;
       }
       return true;
@@ -322,14 +325,7 @@ module.exports = function(grunt) {
 
       // Upload differences to the server
       async.apply(uploadDiff, options.base),
-
-      // Finish the task
-      function() {
-        doneTask();
-      }
-    ], function(err) {
-      if (err) throw err;
-    });
+    ], doneTask);
   });
 
 };

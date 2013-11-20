@@ -1,7 +1,5 @@
 'use strict';
 
-var grunt = require('grunt');
-
 /*
   ======== A Handy Little Nodeunit Reference ========
   https://github.com/caolan/nodeunit
@@ -23,19 +21,17 @@ var grunt = require('grunt');
 */
 
 exports.diff_deploy = {
-  setUp: function(done) {
+  /*setUp: function(done) {
     // setup here if necessary
     done();
   },
   default_options: function(test) {
-    grunt.tt();
-    test.tt();
-    /*test.expect(1);
+    test.expect(1);
 
     var actual = grunt.file.read('tmp/default_options');
     var expected = grunt.file.read('test/expected/default_options');
     test.equal(actual, expected, 'should describe what the default behavior is.');
 
-    test.done();*/
-  },
+    test.done();
+  },*/
 };
