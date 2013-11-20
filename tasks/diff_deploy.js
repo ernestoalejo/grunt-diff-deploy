@@ -91,6 +91,25 @@ module.exports = function(grunt) {
     });
   }
 
+  function fetchRemoteHashes(done) {
+    ftp.get('push-hashes', function(err, socket) {
+      if (err) {
+        // If the file cannot be found, keep running as if nothing
+        // has been uploaded yet to the server
+        done(err.code === 550 ? null : err, {});
+        return;
+      }
+
+      var str = '';
+      socket.on('data', function(data) {
+        str += data.toString();
+      });
+      socket.on('close', function(err) {
+        done(err, JSON.parse(str));
+      });
+    });
+  }
+
   grunt.registerMultiTask('diff_deploy', 'Deploy a folder using FTP. It uploads differences only. It can handle server generated files mixed with the uploaded ones.', function() {
     var doneTask = this.async();
     var options = this.options();
@@ -117,8 +136,16 @@ module.exports = function(grunt) {
       async.map.bind(this, filepaths, fs.stat),
       hashLocalFiles.bind(this, filepaths),
 
+      // Fetch the remote hashes
       function(localHashes, done) {
+        fetchRemoteHashes(function(err, remoteHashes) {
+          done(err, localHashes, remoteHashes);
+        });
+      },
+
+      function(localHashes, remoteHashes, done) {
         console.log(inspect(localHashes));
+        console.log(inspect(remoteHashes));
         done();
       },
 
