@@ -152,6 +152,15 @@ module.exports = function(grunt) {
         return;
       }
 
+      var changePerms = function() {
+        grunt.verbose.writeln('changing file perms...');
+        ftpout.raw.site('chmod', info.filestat.mode.toString(8), rel, function(err) {
+          if (err) done(err);
+          grunt.verbose.writeln('done changing perms');
+          callback();
+        });
+      };
+
       if (info.filestat.isDirectory()) {
         grunt.log.write('.......... creating directory /' + rel + '... ');
         ftpout.raw.mkd(rel, function(err, result) {
@@ -164,14 +173,14 @@ module.exports = function(grunt) {
           } else {
             grunt.log.writeln('SUCCESS'.green);
           }
-          callback();
+          changePerms();
         });
       } else {
         grunt.log.write('.......... uploading file /' + rel + '... ');
         ftpout.put(info.filepath, rel, function(err) {
           if (err) done(err);
           grunt.log.writeln('SUCCESS'.green);
-          callback();
+          changePerms();
         });
       }
     }, done);
