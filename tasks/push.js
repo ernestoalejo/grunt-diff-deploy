@@ -286,7 +286,7 @@ module.exports = function(grunt) {
     ], done);
   }
 
-  grunt.registerMultiTask('diff_deploy', 'Deploy a folder using FTP.', function() {
+  grunt.registerMultiTask('push', 'Deploy a folder using FTP.', function() {
     var doneTask = this.async();
     var options = this.options({
       host: 'localhost',
