@@ -15,9 +15,10 @@ module.exports = function(grunt) {
       JSFtp = require("jsftp"),
       async = require('async'),
       fs = require('fs'),
-      crypto = require('crypto');
+      crypto = require('crypto'),
+      path = require('path');
 
-  var ftp;
+  var ftpin, ftpout;
 
   function credentials(host, done) {
     // Ask for username & password without prompts
@@ -42,21 +43,27 @@ module.exports = function(grunt) {
       }
 
       // Login
-      ftp = new JSFtp({
+      ftpin = new JSFtp({
+        host: host,
+        user: result.username || 'ernesto',
+        pass: result.password,
+      });
+      ftpout = new JSFtp({
         host: host,
         user: result.username || 'ernesto',
         pass: result.password,
       });
 
       // Check login credentials
-      ftp.raw.pwd(function(err, res) {
+      ftpout.raw.pwd(function(err, res) {
         if (err) {
           if (err.code === 530) {
             grunt.fatal('bad username or password');
           }
           throw err;
         }
-        done();
+
+        ftpout.raw.cwd('tt', function() { done(); });
       });
     });
   }
@@ -87,16 +94,22 @@ module.exports = function(grunt) {
       }
       endsum();
     }, function(err) {
-      done(err, hashes);
+      done(err, hashes, filestats);
     });
   }
 
   function fetchRemoteHashes(done) {
-    ftp.get('push-hashes', function(err, socket) {
+    grunt.verbose.writeln('fetch remote hashes...');
+    ftpin.get('push-hashes', function(err, socket) {
       if (err) {
         // If the file cannot be found, keep running as if nothing
         // has been uploaded yet to the server
-        done(err.code === 550 ? null : err, {});
+        if (err.code === 550) {
+          grunt.verbose.writeln('remote hashes not found, using an empty default');
+          done(null, {});
+        } else {
+          done(err, {});
+        }
         return;
       }
 
@@ -105,19 +118,74 @@ module.exports = function(grunt) {
         str += data.toString();
       });
       socket.on('close', function(err) {
+        grunt.verbose.writeln('done fetching remote hashes');
         done(err, JSON.parse(str));
       });
     });
   }
 
-  grunt.registerMultiTask('diff_deploy', 'Deploy a folder using FTP. It uploads differences only. It can handle server generated files mixed with the uploaded ones.', function() {
+  function uploadDiff(basepath, localHashes, remoteHashes, filestats, done) {
+    // Extract all the local paths, sort it to have the folders first
+    // and then the tree inside it
+    var filepaths = [];
+    for (var filepath in localHashes) {
+      filepaths.push(filepath);
+    }
+    filepaths.sort();
+
+    var infos = filepaths.map(function(filepath, i) {
+      return {
+        filepath: filepath,
+        filestat: filestats[i],
+      };
+    });
+
+    async.mapSeries(infos, function(info, callback) {
+      var rel = path.relative(basepath, info.filepath);
+      if (!rel) {
+        callback();
+        return;
+      }
+
+      // Ignore similar fiels that have not been modified
+      if (remoteHashes[info.filepath] && remoteHashes[info.filepath] == localHashes[info.filepath]) {
+        return;
+      }
+
+      if (info.filestat.isDirectory()) {
+        grunt.log.write('.......... creating directory /' + rel + '... ');
+        ftpout.raw.mkd(rel, function(err, result) {
+          if (err) {
+            if (err.code != 550) {
+              done(err);
+            } else {
+              grunt.log.writeln('PRESENT'.yellow);
+            }
+          } else {
+            grunt.log.writeln('SUCCESS'.green);
+          }
+          callback();
+        });
+      } else {
+        grunt.log.write('.......... uploading file /' + rel + '... ');
+        ftpout.put(info.filepath, rel, function(err) {
+          if (err) done(err);
+          grunt.log.writeln('SUCCESS'.green);
+          callback();
+        });
+      }
+    }, done);
+  }
+
+  grunt.registerMultiTask('diff_deploy', 'Deploy a folder using FTP.', function() {
     var doneTask = this.async();
-    var options = this.options();
+    var options = this.options({
+      host: 'localhost',
+      base: '.',
+    });
 
     // Extract filepaths
-    var filepaths = this.files.map(function(file) {
-      return file.src[0];
-    }).filter(function(filepath) {
+    var filepaths = this.filesSrc.filter(function(filepath) {
       // Check if the file / folder exists
       if (!grunt.file.exists(filepath)) {
         grunt.log.warn('Source file "' + src + '" not found.');
@@ -137,17 +205,14 @@ module.exports = function(grunt) {
       hashLocalFiles.bind(this, filepaths),
 
       // Fetch the remote hashes
-      function(localHashes, done) {
+      function(localHashes, filestats, done) {
         fetchRemoteHashes(function(err, remoteHashes) {
-          done(err, localHashes, remoteHashes);
+          done(err, localHashes, remoteHashes, filestats);
         });
       },
 
-      function(localHashes, remoteHashes, done) {
-        console.log(inspect(localHashes));
-        console.log(inspect(remoteHashes));
-        done();
-      },
+      // Upload differences to the server
+      uploadDiff.bind(this, options.base),
 
       // Finish the task
       function() {
