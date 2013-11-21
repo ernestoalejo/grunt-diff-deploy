@@ -10,13 +10,11 @@
 
 module.exports = function(grunt) {
 
-  var inspect = require('util').inspect;
   var prompt = require('prompt'),
       JSFtp = require('jsftp'),
       async = require('async'),
       fs = require('fs'),
       crypto = require('crypto'),
-      path = require('path'),
       _ = require('lodash');
 
   var ftpin, ftpout;
