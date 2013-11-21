@@ -97,6 +97,8 @@ grunt.initConfig({
 In lieu of a formal styleguide, take care to maintain the existing coding style. Add unit tests for any new or changed functionality. Lint and test your code using [Grunt](http://gruntjs.com/).
 
 ## Release History
+* 2013-11-21   v0.2.2   Fix output logs calcs.
+* 2013-11-21   v0.2.1   Fix package URLs.
 * 2013-11-21   v0.2     Remove base configuration (guess it from the dest path). Fix FS stat problems.
 * 2013-11-21   v0.1.1   Fix problem when opening too many files.
 * 2013-11-21   v0.1.0   Release initial push task.

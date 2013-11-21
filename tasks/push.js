@@ -27,7 +27,7 @@ module.exports = function(grunt) {
     return text;
   };
   var wrapRight = function(text) {
-    if (curcol + text.length > totalcols) {
+    if (curcol + text.length + 3 > totalcols) {
       text += '\n';
       curcol = 0;
     }
