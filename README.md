@@ -43,17 +43,6 @@ Default value: `localhost`
 
 Host to connect to.
 
-#### options.base
-Type: `String`
-Default value: `.`
-
-Paths of the remoted files will be generated from the relative path to this base
-folder in the local computer.
-
-For example, if the full path it's `/home/user/myfolder/mysubfolder/myfile` and
-`options.base` is pointing to `/home/user/myfolder`; the file will be uploaded
-to `{{options.remoteBase}}/mysubfolder/myfile` in the server.
-
 #### options.remoteBase
 Type: `String`
 Default value: `.`
@@ -72,7 +61,6 @@ grunt.initConfig({
   push: {
     options: {
       host: 'example.com',
-      base: 'deploy',
     },
     files: [
       {
@@ -92,7 +80,6 @@ grunt.initConfig({
   push: {
     options: {
       host: 'example.com',
-      base: 'deploy',
       remoteBase: 'mysubfolder1/mysubfolder2',
     },
     files: [
@@ -110,5 +97,6 @@ grunt.initConfig({
 In lieu of a formal styleguide, take care to maintain the existing coding style. Add unit tests for any new or changed functionality. Lint and test your code using [Grunt](http://gruntjs.com/).
 
 ## Release History
+* 2013-11-21   v0.2     Remove base configuration (guess it from the dest path). Fix FS stat problems.
 * 2013-11-21   v0.1.1   Fix problem when opening too many files.
 * 2013-11-21   v0.1.0   Release initial push task.

@@ -10,12 +10,14 @@
 
 module.exports = function(grunt) {
 
+  var inspect = require('util').inspect;
   var prompt = require('prompt'),
       JSFtp = require('jsftp'),
       async = require('async'),
       fs = require('fs'),
       crypto = require('crypto'),
-      path = require('path');
+      path = require('path'),
+      _ = require('lodash');
 
   var ftpin, ftpout;
 
@@ -89,33 +91,26 @@ module.exports = function(grunt) {
     });
   }
 
-  function hashLocalFiles(filepaths, filestats, done) {
+  function hashLocalFiles(files, done) {
     var hashes = {};
-
-    var infos = filepaths.map(function(filepath, i) {
-      return {
-        filepath: filepath,
-        filestat: filestats[i],
-      };
-    });
-    async.mapLimit(infos, 100, function(info, callback) {
+    async.mapLimit(files, 100, function(file, callback) {
       var shasum = crypto.createHash('sha1');
 
-      shasum.update(info.filestat.mode.toString(8), 'ascii');
+      shasum.update(file.mode.toString(8), 'ascii');
 
       var endsum = function() {
-        hashes[info.filepath] = shasum.digest('hex');
+        hashes[file.dest] = shasum.digest('hex');
         callback();
       };
-      if (info.filestat.isFile()) {
-        var s = fs.ReadStream(info.filepath);
+      if (file.isFile()) {
+        var s = fs.ReadStream(file.src);
         s.on('data', shasum.update.bind(shasum));
         s.on('end', endsum);
         return;
       }
       endsum();
     }, function(err) {
-      done(err, hashes, filestats);
+      done(err, hashes, files);
     });
   }
 
@@ -146,51 +141,31 @@ module.exports = function(grunt) {
     });
   }
 
-  function uploadDiff(basepath, localHashes, remoteHashes, filestats, done) {
-    // Extract all the local paths, sort it to have the folders first
-    // and then the tree inside it.
-    // Zip paths & stats together too.
-    var localFilepaths = [];
-    for (var filepath in localHashes) {
-      localFilepaths.push(filepath);
-    }
-    localFilepaths.sort();
-    var localInfos = localFilepaths.map(function(filepath, i) {
-      return {
-        filepath: filepath,
-        filestat: filestats[i],
-      };
+  function uploadDiff(localHashes, remoteHashes, files, done) {
+    // Prepare local paths in the correct order
+    var local = files.slice();
+    local.sort(function(a, b) {
+      return (a.src == b.src) ? 0 : (a.src < b.src) ? -1 : 1;
     });
 
-    // Prepare the remote files so we can remove unused files,
-    // in reversed order so we delete first the files and then the folders
-    // containing them.
-    // Zip paths & stats together too.
-    var remoteFilepaths = [];
-    for (filepath in remoteHashes) {
-      remoteFilepaths.push(filepath);
+    // Prepare remote paths in the correct order
+    var remote = [];
+    for (var file in remoteHashes) {
+      remote.push(file);
     }
-    remoteFilepaths.sort();
-    var remoteInfos = remoteFilepaths.map(function(filepath, i) {
-      return {
-        filepath: filepath,
-        filestat: filestats[i],
-      };
-    });
-    remoteInfos.reverse();
+    remote.sort().reverse();
 
     async.series([
-      async.apply(async.mapSeries, localInfos, function(info, mapCallback) {
-        // Relativize path, and ignore root folder
-        var rel = path.relative(basepath, info.filepath);
-        if (!rel) {
+      async.apply(async.mapSeries, local, function(file, mapCallback) {
+        // Ignore root folder
+        if (file.dest == '.') {
           mapCallback();
           return;
         }
 
         // Ignore similar fiels that have not been modified
-        if (remoteHashes[info.filepath] && remoteHashes[info.filepath] == localHashes[info.filepath]) {
-          grunt.verbose.writeln('ignored equal file: ' + info.filepath);
+        if (remoteHashes[file.dest] && remoteHashes[file.dest] == localHashes[file.dest]) {
+          grunt.verbose.writeln('ignored equal file: ' + file.dest);
           mapCallback();
           return;
         }
@@ -198,13 +173,13 @@ module.exports = function(grunt) {
         async.series([
           // Create directories
           function(callback) {
-            if (!info.filestat.isDirectory()) {
+            if (!file.isDirectory()) {
               callback();
               return;
             }
 
-            grunt.log.write(wrap('d--------- /' + rel));
-            ftpout.raw.mkd(rel, function(err) {
+            grunt.log.write(wrap('d--------- /' + file.dest));
+            ftpout.raw.mkd(file.dest, function(err) {
               if (err) {
                 if (err.code != 550) {
                   done(err);
@@ -220,13 +195,13 @@ module.exports = function(grunt) {
 
           // Upload files
           function(callback) {
-            if (info.filestat.isDirectory()) {
+            if (file.isDirectory()) {
               callback();
               return;
             }
 
-            grunt.log.write(wrap('f--------- /' + rel));
-            ftpout.put(info.filepath, rel, function(err) {
+            grunt.log.write(wrap('f--------- /' + file.dest));
+            ftpout.put(file.src, file.dest, function(err) {
               if (err) { done(err); }
               grunt.log.writeln(wrapRight('[SUCCESS]').green);
               callback();
@@ -236,7 +211,7 @@ module.exports = function(grunt) {
           // Change permissions
           function(callback) {
             grunt.verbose.writeln('changing file perms...');
-            ftpout.raw.site('chmod', info.filestat.mode.toString(8), rel, function(err) {
+            ftpout.raw.site('chmod', file.mode.toString(8), file.dest, function(err) {
               if (err) { done(err); }
               grunt.verbose.writeln('done changing perms');
               callback();
@@ -245,19 +220,18 @@ module.exports = function(grunt) {
         ], mapCallback);
       }),
 
-      async.apply(async.mapSeries, remoteInfos, function(info, mapCallback) {
-        if (localHashes[info.filepath]) {
+      // Try to remote files tracked but no longer present in the local copy
+      async.apply(async.mapSeries, remote, function(filepath, mapCallback) {
+        if (localHashes[filepath]) {
           mapCallback();
           return;
         }
 
-        // Relativize path
-        var rel = path.relative(basepath, info.filepath);
-
-        grunt.log.write(wrap('---------- /' + rel).magenta);
+        grunt.log.write(wrap('---------- /' + filepath).magenta);
         async.series([
           function(callback) {
-            ftpout.raw.dele(rel, function(err) {
+            // Try to delete as a file
+            ftpout.raw.dele(filepath, function(err) {
               if (!err) {
                 grunt.log.writeln(wrapRight('[SUCCESS]').green);
               }
@@ -265,7 +239,8 @@ module.exports = function(grunt) {
             });
           },
           function(callback) {
-            ftpout.raw.rmd(rel, function(err) {
+            // Try to delete as a folder
+            ftpout.raw.rmd(filepath, function(err) {
               if (!err) {
                 grunt.log.writeln(wrapRight('[SUCCESS]').green);
               }
@@ -275,6 +250,7 @@ module.exports = function(grunt) {
         ], mapCallback);
       }),
 
+      // Change folder & files perms
       function(callback) {
         grunt.log.write(wrap('===== saving hashes... '));
         ftpout.put(new Buffer(JSON.stringify(localHashes)), 'push-hashes', function(err) {
@@ -290,18 +266,23 @@ module.exports = function(grunt) {
     var doneTask = this.async();
     var options = this.options({
       host: 'localhost',
-      base: '.',
       remoteBase: '.',
     });
 
-    // Extract filepaths
-    var filepaths = this.filesSrc.filter(function(filepath) {
+    // Extract files
+    var files = this.files.filter(function(file) {
+      var filepath = file.src[0];
       // Check if the file / folder exists
       if (!grunt.file.exists(filepath)) {
         grunt.log.warn('Source file "' + filepath + '" not found.');
         return false;
       }
       return true;
+    }).map(function(file) {
+      return {
+        src: file.src[0],
+        dest: file.dest,
+      };
     });
 
     async.waterfall([
@@ -313,18 +294,23 @@ module.exports = function(grunt) {
       },
 
       // Stat all local files & hash them
-      async.apply(async.map, filepaths, fs.stat),
-      async.apply(hashLocalFiles, filepaths),
+      async.apply(async.map, files, function(file, callback) {
+        fs.stat(file.src, function(err, stats) {
+          stats = _.extend(stats, file);
+          callback(err, stats);
+        });
+      }),
+      hashLocalFiles,
 
       // Fetch the remote hashes
-      function(localHashes, filestats, done) {
+      function(localHashes, files, done) {
         fetchRemoteHashes(function(err, remoteHashes) {
-          done(err, localHashes, remoteHashes, filestats);
+          done(err, localHashes, remoteHashes, files);
         });
       },
 
       // Upload differences to the server
-      async.apply(uploadDiff, options.base),
+      uploadDiff,
     ], doneTask);
   });
 
