@@ -271,6 +271,8 @@ module.exports = function(grunt) {
       remoteBase: '.',
     });
 
+    grunt.log.writeln("Pushing to: " + options.host);
+
     // Extract files
     var files = this.files.filter(function(file) {
       var filepath = file.src[0];
