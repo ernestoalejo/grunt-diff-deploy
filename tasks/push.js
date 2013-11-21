@@ -27,13 +27,15 @@ module.exports = function(grunt) {
     return text;
   };
   var wrapRight = function(text) {
-    if (curcol + text.length + 3 > totalcols) {
-      text += '\n';
+    text += '   ';
+    var prefix = '';
+    if (curcol + text.length > totalcols) {
+      prefix = '\n';
       curcol = 0;
     }
-    text = grunt.util.repeat(totalcols - text.length - curcol - 3) + text;
+    text = grunt.util.repeat(totalcols - text.length - curcol) + text;
     curcol = 0;
-    return text;
+    return prefix + text;
   };
 
   function credentials(host, remoteBase, done) {
@@ -90,6 +92,7 @@ module.exports = function(grunt) {
   }
 
   function hashLocalFiles(files, done) {
+    grunt.log.writeln('hashing local files...');
     var hashes = {};
     async.mapLimit(files, 100, function(file, callback) {
       var shasum = crypto.createHash('sha1');
@@ -108,6 +111,7 @@ module.exports = function(grunt) {
       }
       endsum();
     }, function(err) {
+      grunt.log.writeln('done hashing files');
       done(err, hashes, files);
     });
   }
@@ -157,14 +161,14 @@ module.exports = function(grunt) {
       async.apply(async.mapSeries, local, function(file, mapCallback) {
         // Ignore root folder
         if (file.dest == '.') {
-          mapCallback();
+          setImmediate(mapCallback);
           return;
         }
 
         // Ignore similar fiels that have not been modified
         if (remoteHashes[file.dest] && remoteHashes[file.dest] == localHashes[file.dest]) {
           grunt.verbose.writeln('ignored equal file: ' + file.dest);
-          mapCallback();
+          setImmediate(mapCallback);
           return;
         }
 
@@ -221,7 +225,7 @@ module.exports = function(grunt) {
       // Try to remote files tracked but no longer present in the local copy
       async.apply(async.mapSeries, remote, function(filepath, mapCallback) {
         if (localHashes[filepath]) {
-          mapCallback();
+          setImmediate(mapCallback);
           return;
         }
 

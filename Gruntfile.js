@@ -1,6 +1,6 @@
 /*
  * grunt-diff-deploy
- * https://github.com/ernesto/grunt-diff-deploy
+ * https://github.com/ernestoalejo/grunt-diff-deploy
  *
  * Copyright (c) 2013 Ernesto Alejo
  * Licensed under the MIT license.
