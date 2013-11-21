@@ -1,7 +1,7 @@
 {
   "name": "grunt-diff-deploy",
   "description": "Deploy a folder using FTP. It uploads differences only. It can handle server generated files mixed with the uploaded ones.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "homepage": "https://github.com/ernestoalejo/grunt-diff-deploy",
   "author": {
     "name": "Ernesto Alejo"
