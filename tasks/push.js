@@ -98,7 +98,7 @@ module.exports = function(grunt) {
         filestat: filestats[i],
       };
     });
-    async.map(infos, function(info, callback) {
+    async.mapLimit(infos, 100, function(info, callback) {
       var shasum = crypto.createHash('sha1');
 
       shasum.update(info.filestat.mode.toString(8), 'ascii');
