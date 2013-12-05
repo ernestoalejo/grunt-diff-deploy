@@ -213,7 +213,7 @@ module.exports = function(grunt) {
           // Change permissions
           function(callback) {
             grunt.verbose.writeln('changing file perms...');
-            ftpout.raw.site('chmod', file.mode.toString(8), file.dest, function(err) {
+            ftpout.raw.site('chmod', (file.mode & 0777).toString(8), file.dest, function(err) {
               if (err) { done(err); }
               grunt.verbose.writeln('done changing perms');
               callback();
