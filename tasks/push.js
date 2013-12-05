@@ -213,7 +213,8 @@ module.exports = function(grunt) {
           // Change permissions
           function(callback) {
             grunt.verbose.writeln('changing file perms...');
-            ftpout.raw.site('chmod', (file.mode & 0777).toString(8), file.dest, function(err) {
+            // 511 = 0777 octal
+            ftpout.raw.site('chmod', (file.mode & 511).toString(8), file.dest, function(err) {
               if (err) { done(err); }
               grunt.verbose.writeln('done changing perms');
               callback();
@@ -271,7 +272,7 @@ module.exports = function(grunt) {
       remoteBase: '.',
     });
 
-    grunt.log.writeln("Pushing to: " + options.host);
+    grunt.log.writeln('Pushing to: ' + options.host);
 
     // Extract files
     var files = this.files.filter(function(file) {
