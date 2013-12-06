@@ -17,7 +17,7 @@ module.exports = function(grunt) {
       crypto = require('crypto'),
       _ = require('lodash');
 
-  var ftpin, ftpout;
+  var ftpin, ftpout, disablePerms;
 
   var curcol = 0;
   var totalcols = process.stdout.columns;
@@ -60,7 +60,7 @@ module.exports = function(grunt) {
         throw err;
       }
 
-      // Login
+      // Login into the system
       ftpin = new JSFtp({
         host: host,
         user: result.username,
@@ -212,10 +212,22 @@ module.exports = function(grunt) {
 
           // Change permissions
           function(callback) {
+            // Optional permission modification
+            if (disablePerms) {
+              callback();
+              return;
+            }
+            
             grunt.verbose.writeln('changing file perms...');
+
             // 511 = 0777 octal
             ftpout.raw.site('chmod', (file.mode & 511).toString(8), file.dest, function(err) {
-              if (err) { done(err); }
+              // Windows and some hosts don't implement the CHMOD site extension
+              if (err && err.code !== 502 && err.code !== 504) {
+                done(err);
+                return;
+              }
+
               grunt.verbose.writeln('done changing perms');
               callback();
             });
@@ -270,9 +282,16 @@ module.exports = function(grunt) {
     var options = this.options({
       host: 'localhost',
       remoteBase: '.',
+      disablePerms: false,
     });
 
     grunt.log.writeln('Pushing to: ' + options.host);
+    if (disablePerms) {
+      grunt.verbose.writeln('File permissions ignored by configuration!');
+    }
+
+    // Make it global
+    disablePerms = options.disablePerms;
 
     // Extract files
     var files = this.files.filter(function(file) {

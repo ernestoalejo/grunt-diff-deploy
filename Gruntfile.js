@@ -50,6 +50,7 @@ module.exports = function(grunt) {
       default_options: {
         options: {
           host: 'localhost',
+          disablePerms: true,
           remoteBase: 'tt',
         },
         files: [

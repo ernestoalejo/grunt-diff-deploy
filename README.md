@@ -50,6 +50,15 @@ Default value: `.`
 If you want to upload files to a subdirectory of the remote computer, specify the
 path here.
 
+#### options.disablePerms
+Type: `Boolean`
+Default value: `false`
+
+The task issues a CHMOD command to the server for each file & folder. If the remote host
+does not have implemented / actived that feature it will ignore the error messages.
+
+This option allows you to stop these tries if anyhow they're not needed.
+
 ### Usage Examples
 
 #### Common usage
@@ -97,6 +106,7 @@ grunt.initConfig({
 In lieu of a formal styleguide, take care to maintain the existing coding style. Add unit tests for any new or changed functionality. Lint and test your code using [Grunt](http://gruntjs.com/).
 
 ## Release History
+* 2013-12-06   v0.3.0   Add option to disable CHMOD commands. Ignore CHMOD errors. Fixes #1.
 * 2013-12-05   v0.2.6   Fix octal constant.
 * 2013-12-05   v0.2.5   Fix perms sending.
 * 2013-11-21   v0.2.4   Add a log line with the dest host.
