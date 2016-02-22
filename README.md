@@ -106,6 +106,7 @@ grunt.initConfig({
 In lieu of a formal styleguide, take care to maintain the existing coding style. Add unit tests for any new or changed functionality. Lint and test your code using [Grunt](http://gruntjs.com/).
 
 ## Release History
+* 2016-02-22   v0.3.1   Specify version of grunt needed.
 * 2013-12-06   v0.3.0   Add option to disable CHMOD commands. Ignore CHMOD errors. Fixes #1.
 * 2013-12-05   v0.2.6   Fix octal constant.
 * 2013-12-05   v0.2.5   Fix perms sending.
